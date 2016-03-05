@@ -812,6 +812,22 @@ public final class CMSettings {
                 new InclusiveIntegerRangeValidator(0, 3);
 
         /**
+         * Whether the notification light will be allowed when in zen mode during downtime
+         */
+        public static final String ZEN_ALLOW_LIGHTS = "allow_lights";
+
+        /** @hide */
+        public static final Validator ZEN_ALLOW_LIGHTS_VALIDATOR = sBooleanValidator;
+
+        /**
+         * Whether the notification light will be allowed when in zen priority mode during downtime
+         */
+        public static final String ZEN_PRIORITY_ALLOW_LIGHTS = "zen_priority_allow_lights";
+
+        /** @hide */
+        public static final Validator ZEN_PRIORITY_ALLOW_LIGHTS_VALIDATOR = sBooleanValidator;
+
+        /**
          * Display style of AM/PM next to clock in status bar
          * 0: Normal display (Eclair stock)
          * 1: Small display (Froyo stock)
@@ -1439,14 +1455,14 @@ public final class CMSettings {
                 sBooleanValidator;
 
         /**
-         * Whether to allow one finger quick settings expansion on the right side of the statusbar.
-         * 0 = 0ff, 1 = on
+         * Whether to allow one finger quick settings expansion on the side of the statusbar.
+         * 0 = 0ff, 1 = right, 2 = left
          */
         public static final String STATUS_BAR_QUICK_QS_PULLDOWN = "qs_quick_pulldown";
 
         /** @hide */
         public static final Validator STATUS_BAR_QUICK_QS_PULLDOWN_VALIDATOR =
-                sBooleanValidator;
+                new InclusiveIntegerRangeValidator(0, 2);
 
         /**
          * Whether to show the brightness slider in quick settings panel.
@@ -1714,6 +1730,37 @@ public final class CMSettings {
                 };
 
         /**
+         * Whether we automatically generate notification LED colors or just
+         * use the boring default.
+         *
+         * @hide
+         */
+        public static final String NOTIFICATION_LIGHT_COLOR_AUTO =
+                "notification_light_color_auto";
+
+        /** @hide */
+        public static final Validator NOTIFICATION_LIGHT_COLOR_AUTO_VALIDATOR =
+                sBooleanValidator;
+
+        /**
+         * Whether or not to launch default music player when headset is connected
+         */
+        public static final String HEADSET_CONNECT_PLAYER = "headset_connect_player";
+
+        /** @hide */
+        public static final Validator HEADSET_CONNECT_PLAYER_VALIDATOR = sBooleanValidator;
+
+        /**
+         * Whether or not to vibrate when a touchscreen gesture is detected
+         */
+        public static final String TOUCHSCREEN_GESTURE_HAPTIC_FEEDBACK =
+                "touchscreen_gesture_haptic_feedback";
+
+        /** @hide */
+        public static final Validator TOUCHSCREEN_GESTURE_HAPTIC_FEEDBACK_VALIDATOR =
+                sBooleanValidator;
+
+        /**
          * I can haz more bukkits
          * @hide
          */
@@ -1816,6 +1863,9 @@ public final class CMSettings {
                 CMSettings.System.STATUS_BAR_SHOW_BATTERY_PERCENT,
                 CMSettings.System.VOLUME_KEYS_CONTROL_RING_STREAM,
                 CMSettings.System.NAVIGATION_BAR_MENU_ARROW_KEYS,
+                CMSettings.System.HEADSET_CONNECT_PLAYER,
+                CMSettings.System.ZEN_ALLOW_LIGHTS,
+                CMSettings.System.TOUCHSCREEN_GESTURE_HAPTIC_FEEDBACK,
         };
 
         /**
@@ -1958,6 +2008,13 @@ public final class CMSettings {
                     NOTIFICATION_LIGHT_PULSE_CUSTOM_ENABLE_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_LIGHT_PULSE_CUSTOM_VALUES,
                     NOTIFICATION_LIGHT_PULSE_CUSTOM_VALUES_VALIDATOR);
+            VALIDATORS.put(NOTIFICATION_LIGHT_COLOR_AUTO,
+                    NOTIFICATION_LIGHT_COLOR_AUTO_VALIDATOR);
+            VALIDATORS.put(HEADSET_CONNECT_PLAYER, HEADSET_CONNECT_PLAYER_VALIDATOR);
+            VALIDATORS.put(ZEN_ALLOW_LIGHTS, ZEN_ALLOW_LIGHTS_VALIDATOR);
+            VALIDATORS.put(ZEN_PRIORITY_ALLOW_LIGHTS, ZEN_PRIORITY_ALLOW_LIGHTS_VALIDATOR);
+            VALIDATORS.put(TOUCHSCREEN_GESTURE_HAPTIC_FEEDBACK,
+                    TOUCHSCREEN_GESTURE_HAPTIC_FEEDBACK_VALIDATOR);
             VALIDATORS.put(__MAGICAL_TEST_PASSING_ENABLER,
                     __MAGICAL_TEST_PASSING_ENABLER_VALIDATOR);
         };
@@ -2570,6 +2627,33 @@ public final class CMSettings {
          * @hide
          */
         public static final String LOCKSCREEN_VISUALIZER_ENABLED = "lockscreen_visualizer";
+
+        /**
+         * Whether the lock screen is currently enabled/disabled by SystemUI (the QS tile likely).
+         * Boolean settings. 0 = off. 1 = on.
+         * @hide
+         */
+        public static final String LOCKSCREEN_INTERNALLY_ENABLED = "lockscreen_internally_enabled";
+
+        /**
+         * Delimited list of packages allowed to manage/launch protected apps (used for filtering)
+         * @hide
+         */
+        public static final String PROTECTED_COMPONENT_MANAGERS = "protected_component_managers";
+
+        /**
+         * Whether live lock screen is currently enabled/disabled by the user.
+         * Boolean settings. 0 = off, 1 = on
+         * @hide
+         */
+        public static final String LIVE_LOCK_SCREEN_ENABLED = "live_lock_screen_enabled";
+
+        /**
+         * Whether keyguard will direct show security view (0 = false, 1 = true)
+         * @hide
+         */
+        public static final String LOCK_PASS_TO_SECURITY_VIEW = "lock_screen_pass_to_security_view";
+
         // endregion
 
         /**
@@ -2616,6 +2700,7 @@ public final class CMSettings {
                 CMSettings.Secure.APP_PERFORMANCE_PROFILES_ENABLED,
                 CMSettings.Secure.QS_LOCATION_ADVANCED,
                 CMSettings.Secure.LOCKSCREEN_VISUALIZER_ENABLED,
+                CMSettings.Secure.LOCK_PASS_TO_SECURITY_VIEW
         };
 
         /**
@@ -2646,6 +2731,26 @@ public final class CMSettings {
         };
 
         /**
+         * @hide
+         */
+        public static final Validator PROTECTED_COMPONENTS_MANAGER_VALIDATOR = new Validator() {
+            private final String mDelimiter = "|";
+
+            @Override
+            public boolean validate(String value) {
+                if (!TextUtils.isEmpty(value)) {
+                    final String[] array = TextUtils.split(value, Pattern.quote(mDelimiter));
+                    for (String item : array) {
+                        if (TextUtils.isEmpty(item)) {
+                            return false; // Empty components not allowed
+                        }
+                    }
+                }
+                return true;  // Empty list is allowed though.
+            }
+        };
+
+        /**
          * Mapping of validators for all secure settings.  This map is used to validate both valid
          * keys as well as validating the values for those keys.
          *
@@ -2658,6 +2763,7 @@ public final class CMSettings {
                 new ArrayMap<String, Validator>();
         static {
             VALIDATORS.put(PROTECTED_COMPONENTS, PROTECTED_COMPONENTS_VALIDATOR);
+            VALIDATORS.put(PROTECTED_COMPONENT_MANAGERS, PROTECTED_COMPONENTS_MANAGER_VALIDATOR);
         }
 
         /**
@@ -3043,7 +3149,9 @@ public final class CMSettings {
         /**
          * Whether to sound when charger power is connected/disconnected
          * @hide
+         * @deprecated Use {@link android.provider.Settings.Global#CHARGING_SOUNDS_ENABLED} instead
          */
+        @Deprecated
         public static final String POWER_NOTIFICATIONS_ENABLED = "power_notifications_enabled";
 
         /**
@@ -3078,11 +3186,11 @@ public final class CMSettings {
          */
         public static final String[] LEGACY_GLOBAL_SETTINGS = new String[]{
                 CMSettings.Global.WAKE_WHEN_PLUGGED_OR_UNPLUGGED,
-                CMSettings.Global.POWER_NOTIFICATIONS_ENABLED,
                 CMSettings.Global.POWER_NOTIFICATIONS_VIBRATE,
                 CMSettings.Global.POWER_NOTIFICATIONS_RINGTONE,
                 CMSettings.Global.ZEN_DISABLE_DUCKING_DURING_MEDIA_PLAYBACK,
-                CMSettings.Global.WIFI_AUTO_PRIORITIES_CONFIGURATION};
+                CMSettings.Global.WIFI_AUTO_PRIORITIES_CONFIGURATION
+        };
 
         /**
          * @hide

@@ -45,9 +45,13 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
 
+import org.cyanogenmod.internal.util.QSConstants;
+import org.cyanogenmod.internal.util.QSUtils;
+
 import cyanogenmod.providers.CMSettings;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -55,12 +59,12 @@ import java.util.Set;
  * The CMSettingsProvider serves as a {@link ContentProvider} for CM specific settings
  */
 public class CMSettingsProvider extends ContentProvider {
-    static final String TAG = "CMSettingsProvider";
+    public static final String TAG = "CMSettingsProvider";
     private static final boolean LOCAL_LOGV = false;
 
     private static final boolean USER_CHECK_THROWS = true;
 
-   static final String PREF_HAS_MIGRATED_CM_SETTINGS = "has_migrated_cm13_settings";
+    public static final String PREF_HAS_MIGRATED_CM_SETTINGS = "has_migrated_cm13_settings";
 
     private static final Bundle NULL_SETTING = Bundle.forPair("value", null);
 
@@ -204,6 +208,41 @@ public class CMSettingsProvider extends ContentProvider {
             else if (tableName.equals(CMDatabaseHelper.CMTableNames.TABLE_SECURE)) {
                 settingsValue = Settings.Secure.getStringForUser(contentResolver, settingsKey,
                         userId);
+
+                // insert dnd, edit tiles for upgrade from 12.1 -> 13.0
+                if (CMSettings.Secure.QS_TILES.equals(settingsKey) && (settingsValue != null
+                        && (!settingsValue.contains(QSConstants.TILE_DND)
+                        || !settingsValue.contains(QSConstants.TILE_EDIT)))) {
+                    if (LOCAL_LOGV) {
+                        Log.d(TAG, "Need to insert DND or Edit tile for upgrade, currentValue: "
+                                + settingsValue);
+                    }
+
+                    final List<String> tiles = Settings.Secure.getDelimitedStringAsList(
+                            contentResolver, settingsKey, ",");
+
+                    if (!tiles.contains(QSConstants.TILE_DND)) {
+                        tiles.add(QSConstants.TILE_DND);
+                    }
+                    if (!tiles.contains(QSConstants.TILE_EDIT)) {
+                        // we need to insert edit tile to the last tile on the first page!
+                        // ensure edit tile is present
+
+                        // use value in old database
+                        boolean nineTilesPerPage = Settings.Secure.getInt(contentResolver,
+                                CMSettings.Secure.QS_USE_MAIN_TILES, 0) == 1;
+
+                        final int TILES_PER_PAGE = nineTilesPerPage ? 9 : 8;
+
+                        if (tiles.size() > TILES_PER_PAGE) {
+                            tiles.add((TILES_PER_PAGE - 1), QSConstants.TILE_EDIT);
+                        } else {
+                            tiles.add(QSConstants.TILE_EDIT);
+                        }
+                    }
+
+                    settingsValue = TextUtils.join(",", tiles);
+                }
             }
             else if (tableName.equals(CMDatabaseHelper.CMTableNames.TABLE_GLOBAL)) {
                 settingsValue = Settings.Global.getStringForUser(contentResolver, settingsKey,
@@ -212,6 +251,14 @@ public class CMSettingsProvider extends ContentProvider {
 
             if (LOCAL_LOGV) Log.d(TAG, "Table: " + tableName + ", Key: " + settingsKey + ", Value: "
                     + settingsValue);
+
+            // Don't trample defaults with null values. This is the only scenario where defaults
+            // take precedence over migration values.
+            if (settingsValue == null) {
+                if (LOCAL_LOGV) Log.d(TAG, "Skipping migrating " + settingsKey
+                        + " because of null value");
+                continue;
+            }
 
             ContentValues contentValue = new ContentValues();
             contentValue.put(Settings.NameValueTable.NAME, settingsKey);
@@ -308,12 +355,10 @@ public class CMSettingsProvider extends ContentProvider {
 
         // Framework can't do automatic permission checking for calls, so we need
         // to do it here.
-        if (getContext().checkCallingOrSelfPermission(
-                cyanogenmod.platform.Manifest.permission.WRITE_SETTINGS) !=
-                PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException(
-                    String.format("Permission denial: writing to settings requires %1$s",
-                            cyanogenmod.platform.Manifest.permission.WRITE_SETTINGS));
+        if (CMSettings.CALL_METHOD_PUT_SYSTEM.equals(method)) {
+            enforceWritePermission(cyanogenmod.platform.Manifest.permission.WRITE_SETTINGS);
+        } else {
+            enforceWritePermission(cyanogenmod.platform.Manifest.permission.WRITE_SECURE_SETTINGS);
         }
 
         // Put methods
@@ -332,6 +377,15 @@ public class CMSettingsProvider extends ContentProvider {
         }
 
         return null;
+    }
+
+    private void enforceWritePermission(String permission) {
+        if (getContext().checkCallingOrSelfPermission(permission)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException(
+                    String.format("Permission denial: writing to settings requires %s",
+                            permission));
+        }
     }
 
     /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The CyanogenMod Project
+ * Copyright (C) 2015-2016 The CyanogenMod Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 package org.cyanogenmod.platform.internal;
 
 import android.content.Context;
-import android.content.pm.PackageManager;
+import android.content.Intent;
 import android.os.IBinder;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
@@ -32,6 +32,7 @@ import cyanogenmod.hardware.IThermalListenerCallback;
 import cyanogenmod.hardware.ThermalListenerCallback;
 
 import java.io.File;
+import java.util.Arrays;
 
 import org.cyanogenmod.hardware.AdaptiveBacklight;
 import org.cyanogenmod.hardware.AutoContrast;
@@ -49,6 +50,7 @@ import org.cyanogenmod.hardware.TapToWake;
 import org.cyanogenmod.hardware.ThermalMonitor;
 import org.cyanogenmod.hardware.ThermalUpdateCallback;
 import org.cyanogenmod.hardware.TouchscreenHovering;
+import org.cyanogenmod.hardware.UniqueDeviceId;
 import org.cyanogenmod.hardware.VibratorHW;
 
 /** @hide */
@@ -82,6 +84,7 @@ public class CMHardwareService extends SystemService implements ThermalUpdateCal
         public long getLtoDownloadInterval();
 
         public String getSerialNumber();
+        public String getUniqueDeviceId();
 
         public boolean requireAdaptiveBacklightForSunlightEnhancement();
         public boolean isSunlightEnhancementSelfManaged();
@@ -132,6 +135,8 @@ public class CMHardwareService extends SystemService implements ThermalUpdateCal
                 mSupportedFeatures |= CMHardwareManager.FEATURE_PERSISTENT_STORAGE;
             if (ThermalMonitor.isSupported())
                 mSupportedFeatures |= CMHardwareManager.FEATURE_THERMAL_MONITOR;
+            if (UniqueDeviceId.isSupported())
+                mSupportedFeatures |= CMHardwareManager.FEATURE_UNIQUE_DEVICE_ID;
         }
 
         public int getSupportedFeatures() {
@@ -294,6 +299,10 @@ public class CMHardwareService extends SystemService implements ThermalUpdateCal
             return SerialNumber.getSerialNumber();
         }
 
+        public String getUniqueDeviceId() {
+            return UniqueDeviceId.getUniqueDeviceId();
+        }
+
         public boolean requireAdaptiveBacklightForSunlightEnhancement() {
             return SunlightEnhancement.isAdaptiveBacklightRequired();
         }
@@ -336,6 +345,16 @@ public class CMHardwareService extends SystemService implements ThermalUpdateCal
         mContext = context;
         mCmHwImpl = getImpl(context);
         publishBinderService(CMContextConstants.CM_HARDWARE_SERVICE, mService);
+    }
+
+    @Override
+    public void onBootPhase(int phase) {
+        if (phase == PHASE_BOOT_COMPLETED) {
+            Intent intent = new Intent(cyanogenmod.content.Intent.ACTION_INITIALIZE_CM_HARDWARE);
+            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+            mContext.sendBroadcast(intent,
+                    cyanogenmod.platform.Manifest.permission.HARDWARE_ABSTRACTION_ACCESS);
+        }
     }
 
     @Override
@@ -523,6 +542,17 @@ public class CMHardwareService extends SystemService implements ThermalUpdateCal
         }
 
         @Override
+        public String getUniqueDeviceId() {
+            mContext.enforceCallingOrSelfPermission(
+                    cyanogenmod.platform.Manifest.permission.HARDWARE_ABSTRACTION_ACCESS, null);
+            if (!isSupported(CMHardwareManager.FEATURE_UNIQUE_DEVICE_ID)) {
+                Log.e(TAG, "Unique device ID is not supported");
+                return null;
+            }
+            return mCmHwImpl.getUniqueDeviceId();
+        }
+
+        @Override
         public boolean requireAdaptiveBacklightForSunlightEnhancement() {
             mContext.enforceCallingOrSelfPermission(
                     cyanogenmod.platform.Manifest.permission.HARDWARE_ABSTRACTION_ACCESS, null);
@@ -592,6 +622,15 @@ public class CMHardwareService extends SystemService implements ThermalUpdateCal
         public boolean writePersistentBytes(String key, byte[] value) {
             mContext.enforceCallingOrSelfPermission(
                     cyanogenmod.platform.Manifest.permission.MANAGE_PERSISTENT_STORAGE, null);
+            if (key == null || key.length() == 0 || key.length() > 64) {
+                Log.e(TAG, "Invalid key: " + key);
+                return false;
+            }
+            // A null value is delete
+            if (value != null && (value.length > 4096 || value.length == 0)) {
+                Log.e(TAG, "Invalid value: " + (value != null ? Arrays.toString(value) : null));
+                return false;
+            }
             if (!isSupported(CMHardwareManager.FEATURE_PERSISTENT_STORAGE)) {
                 Log.e(TAG, "Persistent storage is not supported");
                 return false;
@@ -603,6 +642,10 @@ public class CMHardwareService extends SystemService implements ThermalUpdateCal
         public byte[] readPersistentBytes(String key) {
             mContext.enforceCallingOrSelfPermission(
                     cyanogenmod.platform.Manifest.permission.MANAGE_PERSISTENT_STORAGE, null);
+            if (key == null || key.length() == 0 || key.length() > 64) {
+                Log.e(TAG, "Invalid key: " + key);
+                return null;
+            }
             if (!isSupported(CMHardwareManager.FEATURE_PERSISTENT_STORAGE)) {
                 Log.e(TAG, "Persistent storage is not supported");
                 return null;

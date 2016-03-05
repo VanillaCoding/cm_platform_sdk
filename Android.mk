@@ -23,6 +23,9 @@ LOCAL_PATH := $(call my-dir)
 # R.java file as a prerequisite.
 cm_platform_res := APPS/org.cyanogenmod.platform-res_intermediates/src
 
+# List of packages used in cm-api-stubs and cm-system-api-stubs
+cm_stub_packages := cyanogenmod.alarmclock:cyanogenmod.app:cyanogenmod.content:cyanogenmod.externalviews:cyanogenmod.hardware:cyanogenmod.media:cyanogenmod.os:cyanogenmod.profiles:cyanogenmod.providers:cyanogenmod.platform:cyanogenmod.power:cyanogenmod.themes:cyanogenmod.util
+
 # The CyanogenMod Platform Framework Library
 # ============================================================
 include $(CLEAR_VARS)
@@ -120,6 +123,12 @@ cmsdk_LOCAL_INTERMEDIATE_SOURCES := \
 LOCAL_INTERMEDIATE_SOURCES := \
     $(cmsdk_LOCAL_INTERMEDIATE_SOURCES)
 
+# Make sure that R.java and Manifest.java are built before we build
+# the source for this library.
+cm_framework_res_R_stamp := \
+    $(call intermediates-dir-for,APPS,org.cyanogenmod.platform-res,,COMMON)/src/R.stamp
+$(full_classes_compiled_jar): $(cm_framework_res_R_stamp)
+$(built_dex_intermediate): $(cm_framework_res_R_stamp)
 $(full_target): $(cm_framework_built) $(gen)
 include $(BUILD_STATIC_JAVA_LIBRARY)
 
@@ -193,7 +202,7 @@ cmplat_docs_java_libraries := \
 cmplat_docs_SDK_VERSION := 13.0
 
 # release version
-cmplat_docs_SDK_REL_ID := 4
+cmplat_docs_SDK_REL_ID := 5
 
 cmplat_docs_LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 
@@ -220,12 +229,11 @@ LOCAL_fDOC_CUSTOM_TEMPLATE_DIR:= build/tools/droiddoc/templates-sdk
 
 LOCAL_DROIDDOC_OPTIONS:= \
         -stubs $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/cmsdk_stubs_current_intermediates/src \
-        -stubpackages cyanogenmod.alarmclock:cyanogenmod.app:cyanogenmod.content:cyanogenmod.hardware:cyanogenmod.media:cyanogenmod.os:cyanogenmod.profiles:cyanogenmod.providers:cyanogenmod.platform:cyanogenmod.power:cyanogenmod.externalviews \
+        -stubpackages $(cm_stub_packages) \
         -exclude org.cyanogenmod.platform.internal \
         -api $(INTERNAL_CM_PLATFORM_API_FILE) \
         -removedApi $(INTERNAL_CM_PLATFORM_REMOVED_API_FILE) \
-        -nodocs \
-        -verbose
+        -nodocs
 
 LOCAL_UNINSTALLABLE_MODULE := true
 
@@ -251,13 +259,12 @@ LOCAL_MODULE := cm-system-api-stubs
 
 LOCAL_DROIDDOC_OPTIONS:=\
         -stubs $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/cmsdk_system_stubs_current_intermediates/src \
-        -stubpackages cyanogenmod.alarmclock:cyanogenmod.app:cyanogenmod.content:cyanogenmod.hardware:cyanogenmod.media:cyanogenmod.os:cyanogenmod.profiles:cyanogenmod.providers:cyanogenmod.platform:cyanogenmod.power:cyanogenmod.externalviews \
+        -stubpackages $(cm_stub_packages) \
         -showAnnotation android.annotation.SystemApi \
         -exclude org.cyanogenmod.platform.internal \
         -api $(INTERNAL_CM_PLATFORM_SYSTEM_API_FILE) \
         -removedApi $(INTERNAL_CM_PLATFORM_SYSTEM_REMOVED_API_FILE) \
-        -nodocs \
-        -verbose
+        -nodocs
 
 LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:= build/tools/droiddoc/templates-sdk
 
@@ -301,7 +308,8 @@ LOCAL_DROIDDOC_OPTIONS := \
         -since $(CM_SRC_API_DIR)/1.txt 1 \
         -since $(CM_SRC_API_DIR)/2.txt 2 \
         -since $(CM_SRC_API_DIR)/3.txt 3 \
-        -since $(CM_SRC_API_DIR)/4.txt 4
+        -since $(CM_SRC_API_DIR)/4.txt 4 \
+        -since $(CM_SRC_API_DIR)/5.txt 5
 
 $(full_target): $(cm_framework_built) $(gen)
 include $(BUILD_DROIDDOC)
